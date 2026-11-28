@@ -94,11 +94,26 @@ def module_snapshot(module: str) -> dict[str, Any]:
         cross["bio_source"] = from_bio
         cross["sediment_source"] = sum(1 for r in store.rows("sample_registry") if r.get("样品类型") == "沉积物")
     elif module == "results_compile":
-        transfer_rows = store.rows("data_transfer")
-        completed = sum(1 for r in transfer_rows if r.get("status") == "已完成")
-        cross["transfer_complete"] = completed
-        cross["transfer_total"] = len(transfer_rows)
-        cross["completeness"] = round(completed / len(transfer_rows) * 100, 1) if transfer_rows else 0
+        # 只统计真正送到报告的回执；同名文件不算收到。
+        receipt_rows = store.rows("results_receipt")
+        accepted = sum(
+            1 for r in receipt_rows
+            if r.get("状态") in ("已核收", "已认领")
+        )
+        pending_supplement = sum(
+            1 for r in receipt_rows if r.get("状态") == "待补充领取")
+        cross["receipt_accepted"] = accepted
+        cross["receipt_pending_supplement"] = pending_supplement
+        cross["receipt_failed"] = sum(
+            1 for r in receipt_rows if r.get("状态") == "核收失败")
+        cross["receipt_total"] = len(receipt_rows)
+    elif module == "data_transfer":
+        # 传输确认结果：报告归属是否可定位，以及它自己的回执。
+        compile_rows = store.rows("results_compile")
+        cross["compile_total"] = len(compile_rows)
+        receipt_rows = store.rows("results_receipt")
+        cross["checkin_failed"] = sum(
+            1 for r in receipt_rows if r.get("状态") == "核收失败")
     elif module == "track_record":
         station_rows = store.rows("station_deploy")
         cross["station_coords"] = len(station_rows)
@@ -128,7 +143,7 @@ def cross_links() -> dict[str, Any]:
         "bio_trawl": [{"target": "sample_registry", "label": "样品登记", "field": "synced_from", "desc": "分拣后自动登记生物样品"}],
         "sediment_sample": [{"target": "sample_registry", "label": "样品信息更新", "field": "save_method", "desc": "分割样品后更新登记信息"}],
         "instrument_calib": [{"target": "equipment_manifest", "label": "设备停用", "field": "disabled_equipment", "desc": "校准不合格自动停用设备"}],
-        "data_transfer": [{"target": "results_compile", "label": "成果完整度", "field": "compile_complete_count", "desc": "传输完成更新汇编数据完整度"}],
+        "data_transfer": [{"target": "results_compile", "label": "成果签收回执", "field": "receipt_count", "desc": "传输确认生成回执，回执绑定报告版本与轮次"}],
         "diving_ops": [{"target": "crew_schedule", "label": "队员可用性", "field": "unavailable_crew", "desc": "潜水中止影响人员状态"}],
         "weather_obs": [{"target": "station_deploy", "label": "站位告警", "field": "alerted_stations", "desc": "恶劣海况标记影响站位作业"}],
         "analysis_request": [{"target": "sample_registry", "label": "样品入库校验", "field": "sample_status", "desc": "批准前校验样品是否入库"}],

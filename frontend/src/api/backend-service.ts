@@ -65,3 +65,32 @@ export async function fetchSnapshot(key: string): Promise<Record<string, any>> {
   if (!response.ok) throw new Error('跨模块快照读取失败')
   return await response.json()
 }
+
+/** 传输确认结果：报告归属、回执、旧轮与补充轮引用凭据。 */
+export async function fetchTransferConfirmation(id: number): Promise<Record<string, any>> {
+  const response = await request(`/api/data_transfer/${id}/confirmation`)
+  if (!response.ok) throw new Error('传输确认结果读取失败')
+  return await response.json()
+}
+
+/** 成果汇编详情：仅本报告当前版本的成果签收回执与实际到件。 */
+export async function fetchCompileReceipts(id: number): Promise<Record<string, any>> {
+  const response = await request(`/api/results_compile/${id}/receipts`)
+  if (!response.ok) throw new Error('成果签收回执读取失败')
+  return await response.json()
+}
+
+/** 按报告/传输查回执，供值班员核对文件归属。 */
+export async function fetchReceipts(params: {
+  reportId?: number
+  transferId?: number
+  status?: string
+}): Promise<Record<string, any>> {
+  const query = new URLSearchParams()
+  if (params.reportId != null) query.set('report_id', String(params.reportId))
+  if (params.transferId != null) query.set('transfer_id', String(params.transferId))
+  if (params.status) query.set('status', params.status)
+  const response = await request(`/api/receipts?${query.toString()}`)
+  if (!response.ok) throw new Error('签收回执读取失败')
+  return await response.json()
+}

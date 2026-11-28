@@ -50,6 +50,8 @@
           <td v-for="column in meta.fields" :key="column">{{ row[column] ?? '—' }}</td>
           <td>{{ row.status }}</td>
           <td class="row-actions">
+            <button v-if="hasDetail" class="link" type="button"
+              :data-testid="`detail-${row.id}`" @click="openDetail(row)">查看详情</button>
             <button v-for="action in meta.actions" :key="action" class="link" type="button"
               :data-testid="`action-${row.id}-${action}`" @click="runAction(action, row)">{{ action }}</button>
           </td>
@@ -76,6 +78,54 @@
       </form>
     </div>
 
+    <div v-if="detail" class="modal-backdrop" data-testid="detail-modal">
+      <div class="modal">
+        <h3>{{ meta.name }}详情 · 记录 {{ detailId }}</h3>
+        <div class="detail-block">
+          <h4>报告归属 / 传输确认</h4>
+          <p v-if="detail['报告归属']">
+            报告 {{ detail['报告归属']['报告编号'] ?? '—' }}（ID {{ detail['报告归属']['报告ID'] ?? '—' }}），
+            航次 {{ detail['报告归属']['航次编号'] ?? '—' }}，
+            接收方 {{ detail['报告归属']['接收方'] ?? '—' }}，
+            版本 {{ detail['报告归属']['报告版本'] ?? '—' }}，
+            当前轮次 {{ detail['报告归属']['当前轮次'] ?? '—' }}
+            <template v-if="detail['报告归属']['可定位'] === false">
+              —— 无法定位：{{ detail['报告归属']['说明'] }}
+            </template>
+          </p>
+          <p v-if="detail['传输确认结果']">
+            传输状态 {{ detail['传输确认结果']['传输状态'] }}；
+            核收结果 {{ detail['传输确认结果']['核收结果'] || '—' }}；
+            可继续确认 {{ detail['传输确认结果']['可继续确认'] ? '是' : '否' }}
+          </p>
+        </div>
+        <div v-if="detailRows.length" class="detail-block">
+          <h4>成果签收回执</h4>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>回执编号</th><th>报告版本</th><th>轮次</th><th>状态</th>
+                <th>核收结果</th><th>引用凭据</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in detailRows" :key="String(item['回执编号'])">
+                <td>{{ item['回执编号'] }}</td>
+                <td>{{ item['报告版本'] }}</td>
+                <td>{{ item['轮次'] }}</td>
+                <td>{{ item['状态'] }}</td>
+                <td>{{ item['核收结果'] }}</td>
+                <td>{{ item['引用凭据'] || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="page-actions">
+          <button class="btn" type="button" @click="detail = null">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条{{ meta.name }}记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
@@ -85,7 +135,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { createEntry, downloadEntries, listEntries, moduleMeta, runAction as applyAction } from '@/api/backend-service'
+import {
+  createEntry, downloadEntries, fetchCompileReceipts, fetchTransferConfirmation,
+  listEntries, moduleMeta, runAction as applyAction,
+} from '@/api/backend-service'
+import { fetchJson } from '@/api/client'
 import type { EntryRow } from '@/data/types'
 
 const props = defineProps<{ moduleKey: string }>()
@@ -98,6 +152,32 @@ const filterFields = meta.fields.slice(0, 3)
 const showCreate = ref(false)
 const creating = ref(false)
 const createValues = ref<Record<string, string>>({})
+const detail = ref<Record<string, any> | null>(null)
+const detailId = ref<number | null>(null)
+const hasDetail = computed(() =>
+  props.moduleKey === 'data_transfer' || props.moduleKey === 'results_compile')
+const detailRows = computed<Record<string, any>[]>(() => {
+  if (!detail.value) return []
+  if (Array.isArray(detail.value['成果签收回执'])) return detail.value['成果签收回执']
+  if (Array.isArray(detail.value['签收历史'])) return detail.value['签收历史']
+  return []
+})
+
+async function openDetail(row: EntryRow) {
+  detailId.value = Number(row.id)
+  errorMessage.value = ''
+  try {
+    if (props.moduleKey === 'data_transfer') {
+      detail.value = await fetchTransferConfirmation(Number(row.id))
+    } else {
+      const receipts = await fetchCompileReceipts(Number(row.id))
+      const full = await fetchJson<Record<string, any>>(`/api/results_compile/${row.id}`)
+      detail.value = { ...full, ...receipts }
+    }
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '详情读取失败'
+  }
+}
 
 const stats = computed(() => [
   { label: meta.metrics[0], value: total.value },

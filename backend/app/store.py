@@ -13,6 +13,9 @@ from app.seed import SEED_ROWS
 
 
 class Store:
+    # 内部凭据表，不作为独立业务模块出现在概览/导航里。
+    INTERNAL_MODULES = {"results_receipt"}
+
     def __init__(self) -> None:
         self._tables: dict[str, list[dict[str, Any]]] = {}
         self._idempotent_keys: set[str] = set()
@@ -44,7 +47,7 @@ class Store:
             return self._locks[key]
 
     def module_names(self) -> list[str]:
-        return sorted(self._tables)
+        return sorted(name for name in self._tables if name not in self.INTERNAL_MODULES)
 
     def rows(self, module: str) -> list[dict[str, Any]]:
         return self._tables.setdefault(module, [])
